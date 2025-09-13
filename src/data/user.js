@@ -34,14 +34,14 @@ export const User = client.define(
       allowNull: true,
       unique: true,
     },
-    // resetToken: {
-    //   type: DataTypes.STRING,
-    //   allowNull: true,
-    // },
-    // resetTokenExpiry: {
-    //   type: DataTypes.DATE,
-    //   allowNull: true,
-    // },
+    resetToken: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    resetTokenExpiry: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     timestamps: true,

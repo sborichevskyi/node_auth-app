@@ -1,17 +1,9 @@
-import { jwtService } from '../services/jwt.service.js';
-
 export const isNotAuth = (req, res, next) => {
-  const h = req.headers.authorization;
+  const authHeader = req.headers.authorization;
+  const refreshToken = req.cookies?.refreshToken;
 
-  if (!h) {
-    return next(); // токену нема — окей, можна далі
-  }
-
-  const [, token] = h.split(' ');
-  const userData = token ? jwtService.verify(token) : null;
-
-  if (userData) {
-    return res.status(403).json({ message: 'Already authenticated' });
+  if (authHeader || refreshToken) {
+    return res.sendStatus(403);
   }
 
   next();

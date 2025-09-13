@@ -13,7 +13,7 @@ export function createServer() {
 
   server.use(
     cors({
-      origin: process.env.CLIENT_ORIGIN || 3000,
+      origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
       credentials: true,
     }),
   );

@@ -63,6 +63,8 @@ export const activate = async (req, res) => {
       return res.status(404).json({ message: 'Invalid activation token' });
     }
 
+    await generateTokens(req, user);
+
     return res.redirect('/profile');
   } catch (err) {
     return res.status(500).json({ message: 'Activation failed' });
@@ -148,12 +150,14 @@ export const requestResetPassword = async (req, res) => {
 
     const token = nodeCrypto.randomBytes(32).toString('hex');
 
-    user.activationToken = token;
+    user.resetToken = token;
+    user.resetTokenExpiry = Date.now() + 3600000;
     await user.save();
 
-    const activationLink = `http://localhost:3000/auth/reset-password/confirm?token=${token}`;
+    const RESET_BASE_URL = process.env.CLIENT_URL || 'http://localhost:3000';
+    const resetLink = `${RESET_BASE_URL}/auth/reset-password/confirm?token=${token}`;
 
-    sendActivationEmail({ to: user.email, activationLink });
+    sendActivationEmail({ to: user.email, activationLink: resetLink });
 
     return res.status(201).json({ message: 'Лист надіслано' });
   } catch (err) {
@@ -170,7 +174,11 @@ export const resetPassword = async (req, res) => {
       return res.status(401);
     }
 
-    if (!token || user.activationToken !== token) {
+    if (
+      !token ||
+      user.resetToken !== token ||
+      user.resetTokenExpiry < Date.now()
+    ) {
       return res.status(401).json({ message: 'No token or token is expired' });
     }
 
@@ -193,8 +201,9 @@ export const resetPassword = async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     user.passwordHash = passwordHash;
-    user.activationToken = null;
-    user.save();
+    user.resetToken = null;
+    user.resetTokenExpiry = null;
+    await user.save();
 
     return res
       .status(201)
