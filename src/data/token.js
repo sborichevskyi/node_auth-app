@@ -5,7 +5,7 @@ import { client } from '../utils/db.js';
 export const Token = client.define('tokens', {
   refreshToken: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: false,
   },
 });
 

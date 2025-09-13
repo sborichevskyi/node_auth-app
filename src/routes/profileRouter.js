@@ -1,4 +1,4 @@
-import express from'express';
+import express from 'express';
 import { profileController } from '../controllers/profile.controller.js';
 import { isAuth } from '../midlewares/isAuthenticated.js';
 

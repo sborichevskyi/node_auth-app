@@ -12,9 +12,12 @@ const isPassword = (password) => {
 };
 
 const isEmail = (email) => {
-  if (!email) return false;
+  if (!email) {
+    return false;
+  }
 
   const emailRegex = /^[\w.-]+@[a-zA-Z\d.-]+\.[a-zA-Z]{2,}$/;
+
   return emailRegex.test(email);
 };
 

@@ -1,5 +1,5 @@
 import { User } from '../data/user.js';
-import crypto from 'crypto';
+import nodeCrypto from 'crypto';
 
 export const normalizeUser = (user) => {
   const plainUser = user?.get ? user.get({ plain: true }) : user;
@@ -13,31 +13,38 @@ export const normalizeUser = (user) => {
 };
 
 export const getAllUsers = async () => {
-	const users = await User.findAll();
+  const users = await User.findAll();
 
-	return users.map((user) => normalizeUser(user));
+  return users.map((user) => normalizeUser(user));
 };
 
 export const createUser = async (name, email, passwordHash) => {
-	const activationToken = crypto.randomBytes(32).toString('hex');
-	const newUser = await User.create({ name, email, passwordHash, activationToken, isActive: false });
+  const activationToken = nodeCrypto.randomBytes(32).toString('hex');
+  const newUser = await User.create({
+    name,
+    email,
+    passwordHash,
+    activationToken,
+    isActive: false,
+  });
 
-	return newUser;
+  return newUser;
 };
 
 export const activateByToken = async (token) => {
-	const user = await User.findOne({ where: { activationToken: token } });
-	if (!user) {
-		return null;
-	}
+  const user = await User.findOne({ where: { activationToken: token } });
 
-	user.isActive = true;
-	user.activationToken = null;
-	await user.save();
+  if (!user) {
+    return null;
+  }
 
-	return normalizeUser(user);
+  user.isActive = true;
+  user.activationToken = null;
+  await user.save();
+
+  return normalizeUser(user);
 };
 
 export const findByEmail = async (email) => {
-  return User.findOne({where: { email }});
+  return User.findOne({ where: { email } });
 };

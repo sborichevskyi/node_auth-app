@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import { sendActivationEmail } from '../services/email.service.js';
 import { validateService } from '../services/validation.service.js';
 import { tokenService } from '../services/token.service.js';
-import crypto from 'crypto';
+import nodeCrypto from 'crypto';
 
 export const register = async (req, res) => {
   try {
@@ -17,7 +17,9 @@ export const register = async (req, res) => {
     }
 
     if (!isValidPassword) {
-      return res.status(400).json({ message: 'Use valid password (8+ chars, 1+ special symbol...)' });
+      return res.status(400).json({
+        message: 'Use valid password (8+ chars, 1+ special symbol...)',
+      });
     }
 
     const isUserExist = await userModel.findByEmail(email);
@@ -33,8 +35,10 @@ export const register = async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
     const newUser = await userModel.createUser(name, email, passwordHash);
 
-    const activationBaseUrl = process.env.ACTIVATION_BASE_URL || 'http://localhost:3000/auth/activate';
+    const activationBaseUrl =
+      process.env.ACTIVATION_BASE_URL || 'http://localhost:3000/auth/activate';
     const activationLink = `${activationBaseUrl}?token=${encodeURIComponent(newUser.activationToken)}`;
+
     await sendActivationEmail({ to: email, activationLink });
 
     const user = userModel.normalizeUser(newUser);
@@ -48,18 +52,18 @@ export const register = async (req, res) => {
 export const activate = async (req, res) => {
   try {
     const { token } = req.query;
+
     if (!token) {
       return res.status(400).json({ message: 'Activation token is required' });
     }
 
     const user = await userModel.activateByToken(String(token));
+
     if (!user) {
       return res.status(404).json({ message: 'Invalid activation token' });
     }
 
-
-
-    return res.status(200).json({ message: 'Acount activated successfully' });
+    return res.redirect('/profile');
   } catch (err) {
     return res.status(500).json({ message: 'Activation failed' });
   }
@@ -72,6 +76,12 @@ export const login = async (req, res) => {
 
     if (!user) {
       return res.status(401).json({ message: 'User doesnt exist' });
+    }
+
+    if (!user.isActive) {
+      return res
+        .status(403)
+        .json({ message: 'Please activate your account via email' });
     }
 
     const isPassMatch = await bcrypt.compare(password, user.passwordHash);
@@ -89,31 +99,42 @@ export const login = async (req, res) => {
 
 export const refresh = async (req, res) => {
   try {
-  const { refreshToken } = req.cookies;
-  const user = jwtService.verifyRefresh(refreshToken);
-  const token = await tokenService.getByToken(refreshToken);
+    const { refreshToken } = req.cookies;
+    const user = jwtService.verifyRefresh(refreshToken);
+    const token = await tokenService.getByToken(refreshToken);
 
-  if (!user || !token) {
-     return res.status(400).json({ message: 'Unauthorized' });
-  }
+    if (!user || !token) {
+      return res.status(400).json({ message: 'Unauthorized' });
+    }
 
-  generateTokens(res, user);
+    generateTokens(res, user);
   } catch (er) {
     return res.status(500).json({ message: 'Bad request' });
   }
 };
 
-export const logout = async (req,res) => {
-  const refreshToken = req.cookies;
-  const userData = await jwtService.verifyRefresh(refreshToken);
+export const logout = async (req, res) => {
+  try {
+    const { refreshToken } = req.cookies;
 
-  if (!userData || !refreshToken) {
-    return res.status(400).json({ message: 'Unauthorized' });
+    if (!refreshToken) {
+      return res.status(400).json({ message: 'No refresh token provided' });
+    }
+
+    const userData = await jwtService.verifyRefresh(refreshToken);
+
+    if (!userData) {
+      return res.status(400).json({ message: 'Unauthorized' });
+    }
+
+    await tokenService.remove(userData.id);
+
+    res.clearCookie('refreshToken');
+
+    return res.sendStatus(204);
+  } catch (err) {
+    return res.status(500).json({ message: 'Bad request' });
   }
-
-  await tokenService.remove(userData.id);
-
-  res.status(204);
 };
 
 export const requestResetPassword = async (req, res) => {
@@ -122,57 +143,65 @@ export const requestResetPassword = async (req, res) => {
     const user = await userModel.findByEmail(email);
 
     if (!user) {
-      return res.status(201).json({ message: "Лист не надіслано" });
+      return res.status(201).json({ message: 'Лист надіслано' });
     }
 
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = nodeCrypto.randomBytes(32).toString('hex');
 
     user.activationToken = token;
-    user.save();
+    await user.save();
 
-    const activationLink = `http://localhost:3000/auth/reset-password/confirm`;
+    const activationLink = `http://localhost:3000/auth/reset-password/confirm?token=${token}`;
 
-    sendActivationEmail({ to: user.email, activationLink: resetLink });
+    sendActivationEmail({ to: user.email, activationLink });
 
-    return res.status(201).json({ message: "Лист надіслано" });
+    return res.status(201).json({ message: 'Лист надіслано' });
   } catch (err) {
-    return res.status(500).json({ message: "Bad request" });
+    return res.status(500).json({ message: 'Bad request' });
   }
 };
 
 export const resetPassword = async (req, res) => {
-try {
-  const { password, confirmation, token, email } = req.body;
-  const user = await userModel.findByEmail(email);
+  try {
+    const { password, confirmation, token, email } = req.body;
+    const user = await userModel.findByEmail(email);
 
-  if (!token || user.activationToken !== token) {
-    return res.status(401).json({ message: "No token or token is expired" });
+    if (!user) {
+      return res.status(401);
+    }
+
+    if (!token || user.activationToken !== token) {
+      return res.status(401).json({ message: 'No token or token is expired' });
+    }
+
+    if (!password || !confirmation) {
+      return res.status(401).json({ message: 'No data to reset a password' });
+    }
+
+    if (password !== confirmation) {
+      return res.status(401).json({ message: 'Passwords dont matches' });
+    }
+
+    const isTruePassword = validateService.isPassword(password);
+
+    if (!isTruePassword) {
+      return res.status(401).json({
+        message: 'Use valid password (8+ chars, 1+ special symbol...)',
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    user.passwordHash = passwordHash;
+    user.activationToken = null;
+    user.save();
+
+    return res
+      .status(201)
+      .json({ message: 'Password was successfully changed' });
+  } catch (err) {
+    return res.status(500).json({ message: 'Bad request' });
   }
-
-  if (!password || !confirmation) {
-    return res.status(401).json({ message: "No data to reset a password" });
-  }
-
-  if (password !== confirmation) {
-    return res.status(401).json({ message: "Passwords dont matches" });
-  }
-
-  const isTruePassword = validateService.isPassword(password);
-
-  if (!isTruePassword) {
-    return res.status(401).json({ message: "Use valid password (8+ chars, 1+ special symbol...)" });
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-
-  user.passwordHash = passwordHash;
-  user.activationToken = null;
-  user.save();
-
-  return res.status(201).json({ message: "Password was successfully changed" });
-} catch (err) {
-  return res.status(500).json({ message: "Bad request" });
-}
 };
 
 const generateTokens = async (res, user) => {
@@ -184,7 +213,8 @@ const generateTokens = async (res, user) => {
 
   res.cookie('refreshToken', refreshToken, {
     maxAge: 30 * 24 * 60 * 60 * 1000,
-    HttpOnly: true,
+    httpOnly: true,
+    sameSite: 'Strict',
   });
 
   res.send({
